@@ -3,8 +3,11 @@
 #include <Sodaq_BMP085.h>
 #include <Sodaq_SHT2x.h>
 #include <Sodaq_WifiBee.h>
+#include <Sodaq_wdt.h>
 
 #define SerialMonitor SerialUSB
+#define Reset_AVR() sodaq_wdt_enable(WDT_PERIOD_1DIV32); while(1) {}
+
 #define TEST 1
 #if TEST == 1
 #define Sprintln(a) SerialMonitor.println(a)
@@ -16,6 +19,8 @@
 
 unsigned long lastConnectionTime = 0; // last time you connected to the server, in milliseconds
 byte postingInterval = 10; // delay between updates, in seconds
+byte failedAttempts = 0;
+const byte retryBeforeReboot = 10;
 
 //Serial Connections
 #define BeeSerial Serial1
@@ -35,15 +40,15 @@ void setup() {
   while (!Serial) {
     ; // wait for serial port to connect. Needed for Leonardo only
   }
+  
+  SerialMonitor.begin(57600);
+  BeeSerial.begin(9600);
 
   // Setup indicator LED
   Sprintln(F("Setup LED to inform when it sends data."));
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
-
-  SerialMonitor.begin(57600);
-  BeeSerial.begin(9600);
-
+  
   #if TEST == 1
     Sprint(F("Device Type: "));
     Sprintln(String(wifiBee.getDeviceType()));
@@ -109,7 +114,10 @@ void loop() {
       Sprint(F("Response Code: "));
       Sprintln(code);
       
-      if(code != 200) {
+      if(code == 200) {
+        failedAttempts = 0;
+      }
+      else {
         #if TEST == 1
           char buffer[1024];
           size_t bytesRead;
@@ -124,14 +132,23 @@ void loop() {
           }
         #endif
         ErrorBlink();
+        failedAttempts++;//Count how many error happens
       }
     }
     else {
       Sprintln(F("Failed connection"));
       ErrorBlink();
+      failedAttempts++;//Count how many error happens
     }
     // note the time that the connection was made
     lastConnectionTime = millis();
+  }
+
+  //Check error and Reboot
+  if (failedAttempts >= retryBeforeReboot) {
+    Reset_AVR();
+    ErrorBlink();
+    failedAttempts = 0;
   }
 
 }//loop

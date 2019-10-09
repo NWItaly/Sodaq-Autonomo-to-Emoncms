@@ -21,8 +21,7 @@ La mia configurazione:
 TODO:
   1. Ridurre il consumo della scheda nei tempi di inutilizzo (watchdog)
   2. Aumentare il tempo di attesa per l'invio dei dati
-  3. Contare il numero di tentativi falliti di connessione al server e riavviare la scheda per risolvere problemi di memoria
-  4. In caso di connessione fallita salvare i dati sulla SD ed inviarli alla prima riconnessione
+  3. In caso di connessione fallita salvare i dati sulla SD ed inviarli alla prima riconnessione
 
 Link esterni:
 Arduino: https://www.arduino.cc/

@@ -8,6 +8,7 @@ Hardware:
     + WiFiBee
   2. Raspberry Pi 2 Model B (+ SD 8 GB)
     + emonPi (pcb only)
+
 La mia configurazione:
   1. Sodaq Autonomo connesso in wifi
     + Il sensore di temperatura va collegato alla porta SDA/SCL
@@ -21,9 +22,8 @@ Software:
   4. Per tutte le stringhe "statiche" utilizzo la funzione F() per ridurre l'utilizzo della memoria
   
 TODO:
-  1. Ridurre il consumo della scheda nei tempi di inutilizzo (watchdog)
-  2. Aumentare il tempo di attesa per l'invio dei dati
-  3. In caso di connessione fallita salvare i dati sulla SD ed inviarli alla prima riconnessione
+  1. Ridurre il consumo della scheda nei tempi di inutilizzo
+  2. In caso di connessione fallita salvare i dati sulla SD ed inviarli alla prima riconnessione
 
 Link esterni:
 Arduino: https://www.arduino.cc/

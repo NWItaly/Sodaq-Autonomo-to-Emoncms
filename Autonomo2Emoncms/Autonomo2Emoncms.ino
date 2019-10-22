@@ -4,6 +4,7 @@
 #include <Sodaq_SHT2x.h>
 #include <Sodaq_WifiBee.h>
 #include <Sodaq_wdt.h>
+#include <RTCCounter.h>
 
 #define SerialMonitor SerialUSB
 #define Reset_AVR() sodaq_wdt_enable(WDT_PERIOD_1DIV32); while(1) {}
@@ -16,9 +17,6 @@
 #define Sprintln(a)
 #define Sprint(a)
 #endif
-
-unsigned long lastConnectionTime = 0; // last time you connected to the server, in milliseconds
-byte postingInterval = 10; // delay between updates, in seconds
 byte failedAttempts = 0;
 const byte retryBeforeReboot = 10;
 
@@ -75,83 +73,108 @@ void setup() {
   #else
     Sprintln(F("BMP085 disabled"));
   #endif
-  
+
+  // Setup the RTCCounter
+  rtcCounter.begin();
+  rtcCounter.setPeriodicAlarm(1);
+
   Sprintln(F("Setup ends"));
 }//setup
 
 void loop() {
+  // If the alarm interrupt has been triggered
+  if (rtcCounter.getFlag()) {
 
-  // if at least <postingInterval> seconds have passed sinceyour last connection,
-  // then connect again and send data:
-  if (millis() - lastConnectionTime > postingInterval * 1000) {
-    String uri = "/emoncms/input/post.json?data={";
-    
-    #if BMP085_Enabled == 1
-      uri += "Temperature1:";
-      uri += String(SHT2x.GetTemperature());
-      uri += ",Temperature2:";
-      uri += String(bmp.readTemperature());
-      uri += ",Pressure:";
-      uri += String(bmp.readPressure());
-      uri += ",Humidity:";
-      uri += String(SHT2x.GetHumidity());
-    #endif
+    // Clear the interrupt flag
+    rtcCounter.clearFlag();
+    SerialMonitor.println(F("Loop.getFlag"));
 
-    uri += "}";
-    if (myEmonData_node != 255) {
-      uri += "&node=";
-      uri += myEmonData_node;
-    }
-    uri += "&apikey=";
-    uri += myEmonData_apiKey;
+    // Set the alarm to generate an interrupt every 1m
+    rtcCounter.setPeriodicAlarm(60-1);//-1 per compensare un bug nella RTCCounter
+
+    SendData();
+        
+  }
+
+  // Sleep until the next interrupt
+  SystemSleep();
+}//loop
+
+void SystemSleep()
+{
+  // If the alarm interrupt has not yet triggered
+  if (!rtcCounter.getFlag()) {
     
-    Sprintln(F("###Data to send###"));
-    Sprintln(uri);
-    Sprintln(F("######"));
+    // Wait For Interrupt
+    __WFI();
+  }
+}
+
+void SendData() {
+  String uri = "/emoncms/input/post.json?data={";
     
-    uint16_t code = 0;
-    if (wifiBee.HTTPGet(myEmonData_serverIP, myEmonData_serverPort, uri, TEST_HEADERS, code)) {
-      Sprint(F("Response Code: "));
-      Sprintln(code);
-      
-      if(code == 200) {
-        failedAttempts = 0;
-      }
-      else {
-        #if TEST == 1
-          char buffer[1024];
-          size_t bytesRead;
-          if (wifiBee.readResponseAscii(buffer, sizeof(buffer), bytesRead)) {
-              Sprintln(F("--------------"));
-              Sprintln(F("Full Response:"));
-              Sprintln(F("--------------"));
-              Sprint(buffer);
-          }
-          else {
-            Sprintln(F("No repsonse")); 
-          }
-        #endif
-        ErrorBlink();
-        failedAttempts++;//Count how many error happens
-      }
+  #if BMP085_Enabled == 1
+    uri += "Temperature1:";
+    uri += String(SHT2x.GetTemperature());
+    uri += ",Temperature2:";
+    uri += String(bmp.readTemperature());
+    uri += ",Pressure:";
+    uri += String(bmp.readPressure());
+    uri += ",Humidity:";
+    uri += String(SHT2x.GetHumidity());
+  #endif
+
+  uri += "}";
+  if (myEmonData_node != 255) {
+    uri += "&node=";
+    uri += myEmonData_node;
+  }
+  uri += "&apikey=";
+  uri += myEmonData_apiKey;
+  
+  Sprintln(F("###Data to send###"));
+  Sprintln(uri);
+  Sprintln(F("######"));
+  
+  uint16_t code = 0;
+  if (wifiBee.HTTPGet(myEmonData_serverIP, myEmonData_serverPort, uri, TEST_HEADERS, code)) {
+    Sprint(F("Response Code: "));
+    Sprintln(code);
+    
+    if(code == 200) {
+      failedAttempts = 0;
     }
     else {
-      Sprintln(F("Failed connection"));
+      #if TEST == 1
+        char buffer[1024];
+        size_t bytesRead;
+        if (wifiBee.readResponseAscii(buffer, sizeof(buffer), bytesRead)) {
+            Sprintln(F("--------------"));
+            Sprintln(F("Full Response:"));
+            Sprintln(F("--------------"));
+            Sprint(buffer);
+        }
+        else {
+          Sprintln(F("No repsonse")); 
+        }
+      #endif
       ErrorBlink();
       failedAttempts++;//Count how many error happens
     }
-    // note the time that the connection was made
-    lastConnectionTime = millis();
   }
-
+  else {
+    Sprintln(F("Failed connection"));
+    ErrorBlink();
+    failedAttempts++;//Count how many error happens
+  }
+  
   //Check error and Reboot
   if (failedAttempts >= retryBeforeReboot) {
     Reset_AVR();
     ErrorBlink();
     failedAttempts = 0;
   }
-
-}//loop
+}//SendData
 
 void ErrorBlink() {
   for (int index = 0; index < 5; index++) {
